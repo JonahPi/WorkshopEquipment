@@ -1,7 +1,7 @@
 # Functional Specification Document
 # Workshop Inventory PWA
 
-**Version:** 0.2 (Draft for review)
+**Version:** 0.5 (Draft for review)
 **Author:** TBD
 **Date:** 2026-04-16
 **Status:** Draft — pending review and refinement
@@ -27,6 +27,9 @@
 
 **Changelog:**
 - v0.2: Added unique box ID creation, Google Sheets import, `Typ`/`Bereich` fields, QR code generation for new entries
+- v0.3: Resolved all open questions — QR content is full PWA URL; `bereich` is free text with stepper-motor coordinates; MQTT broker is Adafruit.io with ack/status feedback; Cloudinary photo import; import is standalone one-time prompt; backup is manual on demand
+- v0.4: "Send to Machine" button logic defined — routes to `stepper.position` or `box` feed on Adafruit.io based on `bereich` format; all open questions resolved
+- v0.5: PWA hosted in `docs/` folder of existing public repo; no build-time secrets; PocketBase URL moved to runtime setup screen
 
 ---
 
@@ -80,7 +83,7 @@ The PWA is publicly hosted but secured behind an access token so that inventory 
 
 The access token is a single static string stored in PocketBase's admin settings (API key). The user enters it once in the PWA login screen; it is stored in `localStorage` and reused on subsequent visits.
 
-> **Open question:** Should there be a way to invalidate/rotate the token without losing access on the phone? (e.g., a "logout" option that clears localStorage)
+Token invalidation is handled via the PocketBase Admin UI — revoking the token there causes the next API call from the phone to return `401`, which the app already handles by redirecting to the setup screen. No logout button needed in the PWA.
 
 ---
 
@@ -135,7 +138,8 @@ box_id → mqtt.js → publish to workshop/box/scan
 | CSV parsing | [Papa Parse](https://www.papaparse.com) | MIT | Robust in-browser CSV parsing for Google Sheets import |
 | MQTT client | [mqtt.js](https://github.com/mqttjs/MQTT.js) | MIT | Browser-compatible, WebSocket transport |
 | PocketBase client | [pocketbase JS SDK](https://github.com/pocketbase/js-sdk) | MIT | Official SDK, typed, handles auth headers and file URLs |
-| PWA hosting | [Cloudflare Pages](https://pages.cloudflare.com) | Free tier | Global CDN, HTTPS by default, unlimited static requests |
+| PWA hosting | [GitHub Pages](https://pages.github.com) | Free | Served from `docs/` folder of existing public repo `JonahPi/WorkshopEquipment`; no separate repo needed |
+| SvelteKit adapter | [@sveltejs/adapter-static](https://kit.svelte.dev/docs/adapter-static) | MIT | Outputs a fully static site; build output directed to `docs/` |
 | Backend hosting | [Fly.io](https://fly.io) | Free tier | Persistent volumes, no auto-sleep with `min_machines_running=1` |
 
 ---
@@ -180,31 +184,36 @@ The existing Google Sheets export has these columns:
 
 ### `bereich` field — location format
 
-The `bereich` field has two formats depending on `typ`:
+`bereich` is a free-text string. Two patterns appear in practice:
 
-| `typ` | `bereich` format | Example |
-|---|---|---|
-| `Box`, `Regal`, `Boden`, `Schublade` | `x/y` grid coordinates | `3/2` (column 3, row 2) |
-| `Sortierbox` | Sorting box number | `7` (compartment or box number 7) |
+| Pattern | Format | Example | Used when |
+|---|---|---|---|
+| Stepper-motor coordinates | `x/y` — two integers 0–10000 | `3500/2000` | Storage has a precise physical location the laser pointer can target |
+| Descriptive label | Free text, no numbers | `Kellertreppe`, `Regal`, `Schrank` | General area without precise coordinates |
 
-> **Open question:** For `Sortierbox`, does `bereich` store only the sorting box number (e.g. `7`), or a compartment within a specific box (e.g. `BoxNr/Compartment` like `12/3`)? Clarification needed to finalise the format.
+The "Send to Machine" action passes `bereich` directly to the downstream machine, which uses x/y values to drive stepper motors and point a laser at the correct storage location. Descriptive values are passed as-is and ignored by the motor controller.
 
-> **Open question:** For `Regal`/`Boden` coordinate system — does x refer to horizontal position and y to vertical (shelf level)? Is there a fixed grid size per storage unit, or are coordinates free-form?
+The UI input is a **single free-text field** — no structured x/y split.
 
 ### `box_nr` — unique ID generation
 
 - On creation of a new entry, the app fetches the current maximum `box_nr` from PocketBase and assigns `max + 1`
 - `box_nr` is stored as a Number and displayed zero-padded where needed (e.g. `042`)
 - `box_nr` is immutable after creation (it is printed on the physical QR code label)
-- The QR code content encodes the `box_nr` value as a plain integer string (e.g. `"42"`)
 
-> **Open question:** Should `box_nr` be a plain integer or have a prefix (e.g. `BOX-042`)? This affects what is encoded in the QR code and what is already printed on existing labels.
+### QR Code content
 
-### QR Code
+The QR code encodes the **full PWA URL** for the item, not just the box number:
 
-- Generated client-side from `box_nr` using the `qrcode` npm package (MIT)
-- Displayed after new entry creation so the user can screenshot or print the label
-- Not stored in the database — always re-generated on demand from `box_nr`
+```
+https://jonahpi.github.io/WorkshopEquipment/item/{box_nr}
+```
+
+When scanned with the standard iPhone camera (no app needed), this URL opens the PWA directly at the item's detail view. If the PWA is not installed, iOS Safari opens it as a web page.
+
+Existing physical labels encode `http://192.168.10.30/search?b={box_nr}` — these continue to work via the QR scanner inside the app (the app extracts `box_nr` from the URL parameter `b`).
+
+The QR code is not stored in the database; the content is always derived from `box_nr` and the known PWA base URL at print time.
 
 **Thumbnail URL pattern:**
 ```
@@ -212,31 +221,48 @@ https://your-pb.fly.dev/api/files/items/{record_id}/{filename}?thumb=200x200
 ```
 PocketBase generates and caches thumbnails automatically — no additional service required.
 
-### MQTT message (not persisted)
+### MQTT messages (not persisted)
 
-Published to topic `workshop/box/scan` when the user taps "Send to Machine":
+**Send to Machine** — topic depends on `bereich` format (see Section 9):
 
+- If `bereich` matches `integer/integer` → topic `ToniTwn/feeds/stepper.position`, value: the `bereich` string (e.g. `"3500/2000"`)
+- Otherwise → topic `ToniTwn/feeds/box`, value: the `box_nr` integer (e.g. `42`)
+
+**Print Label** — topic `ToniTwn/feeds/data` on Adafruit.io (see Section 9):
 ```json
 {
-  "box_nr": 42,
-  "timestamp": "2026-04-16T10:30:00Z",
-  "action": "scan"
+  "label_type": "material",
+  "data": {
+    "box_nr": 42,
+    "qr_content": "https://jonahpi.github.io/WorkshopEquipment/item/42",
+    "inhalt": "Metrische Schrauben M4-M8, Unterlegscheiben",
+    "copies": 1
+  }
 }
 ```
-
-> **Open question:** Is the MQTT topic `workshop/box/scan` correct? Should the topic include the `box_nr` (e.g. `workshop/box/42`)? What payload format does the downstream consumer expect?
 
 ---
 
 ## 7. Screens & Features
 
-### 7.1 Login Screen
+### 7.1 Login / Setup Screen
 
-- Single full-screen form: access token input field + "Unlock" button
-- On submit: attempt a lightweight PocketBase API call with the token
-  - Success (200) → store token in `localStorage`, navigate to Gallery
-  - Failure (401) → show inline error "Invalid token"
-- If a valid token already exists in `localStorage`, skip this screen automatically
+On first launch (or when credentials are missing from `localStorage`), a setup screen collects all runtime configuration. Nothing is baked into the build — the same static files work regardless of backend location.
+
+**PocketBase connection** (gates inventory data):
+- `PocketBase URL` — e.g. `https://your-instance.fly.dev`
+- `Access token` — the API key from PocketBase admin settings
+- "Verify" button: tests the URL + token with a lightweight API call
+  - 200 → proceed; error → show inline message
+
+**Adafruit.io credentials** (required for MQTT / label printing and machine control):
+- `AIO Username` — e.g. `ToniTwn`
+- `AIO Key` — `aio_xxxxxxxxxxxxxxxx`
+- Optional "Test connection" button
+
+All four values are stored in `localStorage` (`pb_url`, `pb_token`, `aio_username`, `aio_key`). On subsequent launches, if all are present, this screen is skipped entirely.
+
+**No credentials appear anywhere in the repository or build output.**
 
 ### 7.2 Gallery View
 
@@ -266,8 +292,10 @@ Published to topic `workshop/box/scan` when the user taps "Send to Machine":
   - `bereich` (formatted as `x/y` or `Sortierbox N`)
   - `inhalt` (full text)
 - **"Print Label" button**: publishes an MQTT message to the label-printing topic with the item's `box_nr` — a separate app handles actual QR code generation and printing
-- **"Send to Machine" button**: publishes MQTT message with the item's `box_nr`
-  - Shows MQTT connection status (connected / disconnected indicator)
+- **"Send to Machine" button**: routing logic based on `bereich` value:
+  - If `bereich` matches the pattern `integer/integer` (e.g. `3500/2000`) → publishes the `bereich` string to `ToniTwn/feeds/stepper.position` (drives the laser pointer to the storage location)
+  - Otherwise → publishes `box_nr` to `ToniTwn/feeds/box` (sends the box number for generic machine handling)
+  - Shows printer/machine connection status indicator
   - Confirms send with a toast notification
 - **"Edit" button**: opens the item form pre-filled for editing
 - Back navigation to Gallery
@@ -292,9 +320,7 @@ Four-step wizard for creating a new inventory entry:
 
 **Step 3 — Storage Location**
 - `typ` selector: segmented control (Box / Regal / Boden / Schublade / Sortierbox)
-- `bereich` input — adapts based on `typ`:
-  - If `typ` ≠ Sortierbox: two number inputs labelled "X" and "Y", stored as `"x/y"` string
-  - If `typ` = Sortierbox: single number input labelled "Sortierbox Nr."
+- `bereich` input: single free-text field — user enters either stepper-motor coordinates (`3500/2000`) or a descriptive label (`Kellertreppe`); no validation enforced
 
 **Step 4 — Contents**
 - `inhalt`: multi-line text area
@@ -312,43 +338,36 @@ Four-step wizard for creating a new inventory entry:
 
 ### 7.6 Import Screen
 
-One-time (or occasional) import of existing Google Sheets data.
-
-**Entry point:** Settings menu → "Import from CSV"
+One-time import of existing Google Sheets data. Shown automatically as a prompt when the PocketBase `items` collection is empty after first login. Can also be a standalone script run outside the PWA if preferred.
 
 **Flow:**
 
 1. **Upload CSV file**
    - `<input type="file" accept=".csv">` — user selects a CSV exported from Google Sheets
    - Expected columns (in any order): `BoxNR`, `Inhalt`, `Typ`, `Bereich`, `Foto`, `QRcode`
-   - App parses and previews the first 5 rows in a table for the user to verify
+   - App parses (Papa Parse) and previews the first 5 rows for verification
 
 2. **Validate**
-   - Check that required columns are present; show error if missing
-   - Check each `Typ` value is one of the allowed enum values; flag unknown values
-   - Check for duplicate `BoxNR` values within the CSV and against existing PocketBase data
-   - Show a summary: "N rows ready to import, M duplicates, K rows with warnings"
+   - Check required columns are present; show error if missing
+   - Check each `Typ` value is a known enum value; flag unknowns as warnings
+   - Check for duplicate `BoxNR` values; duplicates are skipped (existing record preserved)
+   - Show summary: "N rows ready to import, M duplicates skipped, K warnings"
 
-3. **Conflict resolution option** (shown if duplicates found):
-   - Skip duplicates (default)
-   - Overwrite existing records with matching `BoxNR`
+3. **Execute import**
+   - POST each row to PocketBase sequentially with a progress bar
+   - `Foto` column: contains public Cloudinary URLs (e.g. `https://res.cloudinary.com/dh04w3wmx/image/upload/...`) — fetch each image directly and upload to PocketBase as a file attachment; log any fetch failures and continue
+   - `QRcode` column: ignored (QR content is derived from `box_nr` + PWA URL at print time)
+   - Show final result: "N imported, M skipped, K photo errors"
 
-4. **Execute import**
-   - POST each row to PocketBase sequentially (with a progress bar)
-   - `Foto` column: if the value is a URL (Google Drive link), attempt to download and upload the image; if the download fails (auth wall), skip the photo and flag the row — user can add photos manually later
-   - `QRcode` column: ignored (re-generated from `BoxNR` on demand)
-   - Show final result: "N imported, M skipped, K errors"
-
-> **Open question:** The `Foto` column in Google Sheets likely contains Google Drive URLs that require authentication to access. Should the import silently skip photos (importing text data only) and let the user add photos manually? Or is there a way to pre-export the photos alongside the CSV?
+4. **After import**: prompt is dismissed and not shown again (flag stored in `localStorage`)
 
 ### 7.7 Navigation
 
-iOS-style bottom tab bar with tabs:
+iOS-style bottom tab bar with two tabs:
 - Gallery (home icon)
 - Add Item (plus icon)
-- Settings (gear icon) — includes Import, logout, app version
 
-> **Open question:** Is a dedicated Settings tab the right home for Import, or should Import be a one-time prompt shown after first login when the database is empty?
+No Settings tab — credentials are entered once at setup and no logout or settings changes are needed during normal use.
 
 ---
 
@@ -373,11 +392,11 @@ Check localStorage for token
                 └── 200 → render app
 ```
 
-**Token lifecycle:**
-- Stored under key `workshop_token` in `localStorage`
-- Attached to all PocketBase SDK requests via `pb.beforeSend` hook
+**Credential lifecycle:**
+- `pb_url` and `pb_token` stored in `localStorage`; PocketBase SDK initialised with the runtime URL on app start
+- Token attached to all PocketBase SDK requests via `pb.beforeSend` hook
 - No expiry enforced at the PWA level (PocketBase API token does not expire unless revoked)
-- "Log out" option (if implemented) clears `localStorage` and redirects to `/login`
+- Nothing is hardcoded in the build — the same `docs/` output works against any PocketBase instance
 
 ---
 
@@ -385,34 +404,69 @@ Check localStorage for token
 
 **Library:** `mqtt.js` with WebSocket (`wss://`) transport
 
-**Connection:**
-- MQTT client initialized as a Svelte store on app startup (after authentication)
-- Broker URL and credentials stored as environment variables (`PUBLIC_MQTT_BROKER_URL`, `PUBLIC_MQTT_TOPIC`)
+### Broker — Adafruit.io
+
+The label-printing MQTT broker is hosted on **Adafruit.io** (`io.adafruit.com`), which supports WebSocket natively over `wss://io.adafruit.com:443/mqtt`.
+
+**Credentials** (user-entered once at setup, stored in `localStorage`):
+
+| Key | Description |
+|---|---|
+| `aio_username` | Adafruit.io username (e.g. `ToniTwn`) |
+| `aio_key` | Adafruit.io API key (`aio_xxxxxxxxxxxxxxxx`) |
+
+Entered on the setup screen, persisted in `localStorage`. Not present anywhere in the repository or build output.
+
+### MQTT Topics
+
+| Direction | Topic | Purpose |
+|---|---|---|
+| Publish | `{aio_username}/feeds/data` | Send label-print job to printer |
+| Publish | `{aio_username}/feeds/stepper.position` | Drive laser pointer to storage location (when `bereich` is `int/int`) |
+| Publish | `{aio_username}/feeds/box` | Send box number to machine (when `bereich` is descriptive text) |
+| Subscribe | `{aio_username}/feeds/ack` | Printer confirmed receipt: `{"received": true}` |
+| Subscribe | `{aio_username}/feeds/status` | Printer status: `{"printer": "offline"}` if unavailable |
+
+### Connection behaviour
+
+- MQTT client is a Svelte store, initialized after credentials are loaded from `localStorage`
+- Subscribes to `feeds/ack` and `feeds/status` immediately on connect
 - Auto-reconnect on disconnect (mqtt.js built-in)
-- Connection state (`connected` / `disconnected`) exposed in the store and shown in Detail View UI
+- Printer status (`online` / `offline`) displayed in the Detail View near the "Print Label" button
+- On "Print Label" tap: publish, then wait up to 5 s for `feeds/ack` response; show toast "Label sent ✓" or "No confirmation received"
 
-**Publish — two topics:**
+### Payloads
 
-| Action | Topic | Triggered from | Payload |
-|---|---|---|---|
-| Send to machine | `workshop/box/scan` | Detail View "Send to Machine" button | See Section 6 |
-| Print QR label | `workshop/box/print` | Detail View "Print Label" button, Add Item Step 1 | `{ "box_nr": 42 }` |
+**Print label** → `{aio_username}/feeds/data` (QoS 0):
+```json
+{
+  "label_type": "material",
+  "data": {
+    "box_nr": 42,
+    "qr_content": "https://jonahpi.github.io/WorkshopEquipment/item/42",
+    "inhalt": "Metrische Schrauben M4-M8, Unterlegscheiben",
+    "copies": 1
+  }
+}
+```
 
-Both are QoS 0 (fire-and-forget). The label-printing app subscribes to `workshop/box/print` and handles QR code generation and physical printing independently.
+**Send to machine — stepper position** → `{aio_username}/feeds/stepper.position` (QoS 0):
 
-> **Open question:** What is the correct MQTT topic for label printing (e.g. `workshop/box/print`)? What payload format does the label-printing app expect?
+Condition: `bereich` matches regex `/^\d+\/\d+$/`
 
-**Broker requirements:**
-- Must support WebSocket transport (port 9001 or 443/wss)
-- If the existing broker is Mosquitto, add to `mosquitto.conf`:
-  ```
-  listener 9001
-  protocol websockets
-  ```
+```
+3500/2000
+```
+Plain string value — the downstream stepper-motor controller parses x and y from the `integer/integer` format and positions the laser pointer accordingly.
 
-> **Open question:** Does the existing MQTT broker support WebSocket connections? If not, which option is preferred: (a) configure WebSocket on existing broker, (b) add a lightweight relay, or (c) use a public test broker like HiveMQ for now?
+**Send to machine — box reference** → `{aio_username}/feeds/box` (QoS 0):
 
-> **Open question:** Is MQTT authentication (username/password) required for the broker?
+Condition: `bereich` does **not** match `integer/integer` (e.g. `Kellertreppe`, `Schrank`)
+
+```
+42
+```
+Plain integer value — the `box_nr`, for generic machine handling when no precise coordinates are available.
 
 ---
 
@@ -479,25 +533,27 @@ iOS Safari does not fire a native PWA install prompt. Implement a custom banner:
   - `min_machines_running = 1` (prevents cold starts)
   - Internal port: 8090 (PocketBase default)
   - HTTPS via Fly.io auto-TLS
-- CORS configured in PocketBase Admin UI to allow requests from the Cloudflare Pages domain
+- CORS configured in PocketBase Admin UI to allow requests from `https://jonahpi.github.io`
 
-### Frontend — Cloudflare Pages
+### Frontend — GitHub Pages (`docs/` folder)
 
-- Connected to the GitHub repository
-- Build command: `cd frontend && npm run build`
-- Output directory: `frontend/.svelte-kit/cloudflare`
-- Environment variables set in Cloudflare Pages dashboard:
-  - `PUBLIC_PB_URL` — PocketBase instance URL
-  - `PUBLIC_MQTT_BROKER_URL` — MQTT broker WebSocket URL
-  - `PUBLIC_MQTT_TOPIC` — MQTT topic
+- **Repository:** `JonahPi/WorkshopEquipment` (existing public repo — no separate repo needed)
+- **Served from:** `docs/` folder on the `main` branch (configured in repo Settings → Pages → Source)
+- **Adapter:** `@sveltejs/adapter-static` with `outDir: '../docs'` in `svelte.config.js`
+- **Build:** GitHub Actions workflow triggered on push to `main`:
+  1. `cd frontend && npm ci && npm run build` — outputs static files to `docs/`
+  2. Commits and pushes the updated `docs/` folder back to `main`
+- **No environment variables in the build** — all backend URLs and credentials are entered by the user at runtime and stored in `localStorage`. The build is completely credential-free.
+- **HTTPS:** Provided automatically by GitHub Pages
+- **CORS:** PocketBase must allow requests from `https://jonahpi.github.io`
+- **SvelteKit base path:** Set `base: '/WorkshopEquipment'` in `svelte.config.js` so all asset and route paths resolve correctly under the repo sub-path
+- **Client-side routing fallback:** Copy `docs/index.html` to `docs/404.html` in the build step so that deep-linked URLs (e.g. `/WorkshopEquipment/item/42`) are served correctly by GitHub Pages
 
 ### Backup Strategy
 
 - PocketBase built-in backup API: `POST /api/backups` → creates a `.zip` of `pb_data/`
 - Schedule: nightly backup via PocketBase's cron hook or external cron trigger
-- Destination: TBD (local download, Fly.io volume snapshot, or Backblaze B2)
-
-> **Open question:** Where should backups be stored? Options: (a) manual download on demand, (b) automated to Backblaze B2 (free tier 10 GB), (c) Fly.io volume snapshots.
+- Destination: manual on-demand download via PocketBase Admin UI (`/api/backups`)
 
 ---
 
@@ -508,7 +564,7 @@ iOS Safari does not fire a native PWA install prompt. Implement a custom banner:
 - [ ] Scaffold SvelteKit + Tailwind CSS + vite-plugin-pwa
 - [ ] Login screen + token store (`localStorage`)
 - [ ] Gallery view with real data from PocketBase (including Typ chips and Bereich display)
-- [ ] Deploy frontend to Cloudflare Pages; configure CORS
+- [ ] Configure GitHub Pages to serve from `docs/` on `main`; set SvelteKit `base: '/WorkshopEquipment'` and `outDir: '../docs'`; add GitHub Actions build workflow; configure PocketBase CORS for `jonahpi.github.io`
 
 **Milestone:** Can log in and see inventory items in a gallery.
 
@@ -531,10 +587,12 @@ iOS Safari does not fire a native PWA install prompt. Implement a custom banner:
 **Milestone:** Full inventory management works end-to-end on iPhone.
 
 ### Phase 4 — MQTT
-- [ ] mqtt.js store: connect, reconnect, publish
-- [ ] "Send to Machine" button on Detail view
-- [ ] Connection status indicator
-- [ ] Validate with existing broker
+- [ ] mqtt.js store: connect to Adafruit.io via WSS with AIO credentials from `localStorage`; auto-reconnect
+- [ ] Subscribe to `feeds/ack` and `feeds/status`; expose printer status in store
+- [ ] "Print Label" button: publish to `{aio_username}/feeds/data`; await ack toast
+- [ ] "Send to Machine" button: evaluate `bereich` format → publish to `feeds/stepper.position` (coordinates) or `feeds/box` (box_nr)
+- [ ] Printer online/offline indicator in Detail View
+- [ ] Validate end-to-end with physical printer
 
 **Milestone:** Box scan triggers MQTT message.
 
@@ -569,25 +627,8 @@ iOS Safari does not fire a native PWA install prompt. Implement a custom banner:
 
 ## 14. Open Questions
 
-Items requiring decisions before or during implementation:
+All questions resolved. No open items.
 
-### Data model
-1. **`box_nr` format:** Should `box_nr` be stored and encoded in QR codes as a plain integer (e.g. `42`) or with a prefix (e.g. `BOX-042`)? This must match what is already printed on existing physical labels.
-2. **`bereich` for Sortierbox:** Does `bereich` store only the sorting box number (e.g. `7`), or a compartment within a specific box (e.g. `12/3`)? Is there ever a case where a Sortierbox item also has x/y coordinates?
-3. **`bereich` coordinate system:** For `Regal`/`Boden` — does x = horizontal position and y = vertical (shelf level)? Is there a maximum grid size, or are coordinates free-form integers?
-
-### Import
-4. **Photos in Google Sheets:** The `Foto` column likely contains Google Drive URLs requiring authentication. Should the import skip photos entirely (text-only import, photos added manually later), or is there a way to pre-export images alongside the CSV?
-5. **Import trigger:** Should the Import function live in a Settings tab (always accessible) or be shown as a one-time prompt when the database is empty after first login?
-6. **Duplicate handling default:** When the same `BoxNR` exists in both the CSV and PocketBase, should the default be "skip" (preserve existing) or "overwrite" (take CSV version)?
-
-### MQTT
-7. **MQTT scan topic format:** Should the topic be `workshop/box/scan` (flat) or `workshop/box/{box_nr}` (per-box topics)?
-8. **MQTT scan payload format:** What does the downstream machine consumer expect? (JSON vs plain integer string vs custom format)
-9. **MQTT label-printing topic:** What is the correct topic name for the label-printing app? What payload format does it expect?
-10. **MQTT broker WebSocket:** Does the existing broker support WSS? Username/password required?
-
-### UX / Access
-10. **Token rotation:** Is a "Log Out" / "Change Token" feature needed in the UI?
-11. **Backup destination:** Where should automated PocketBase backups go? Options: (a) manual download on demand, (b) Backblaze B2 free tier (10 GB), (c) Fly.io volume snapshots.
 12. **Offline priority:** How important is offline Add Item support? (affects Phase 5 complexity significantly)
+
+    answer: not important

@@ -1,0 +1,23 @@
+app = "workshop-inventory-pb"
+primary_region = "fra"          # Frankfurt — change to your nearest region
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[env]
+  PORT = "8090"
+
+[[mounts]]
+  source      = "pb_data"
+  destination = "/pb_data"
+
+[http_service]
+  internal_port        = 8090
+  force_https          = true
+  auto_stop_machines   = false   # keep alive — no cold starts
+  auto_start_machines  = true
+  min_machines_running = 1
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "256mb"

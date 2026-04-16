@@ -1,0 +1,10 @@
+node_modules/
+.svelte-kit/
+.env
+.env.*
+!.env.example
+frontend/.svelte-kit/
+frontend/node_modules/
+backend/pb_data/
+backend/pocketbase
+*.pb
