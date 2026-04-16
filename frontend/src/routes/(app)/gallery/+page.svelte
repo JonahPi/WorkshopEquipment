@@ -121,9 +121,23 @@
       </div>
 
     {:else if filtered.length === 0}
-      <div class="flex items-center justify-center h-48 text-gray-400 text-sm">
-        {items.length === 0 ? 'No items yet — tap + to add one.' : 'No results.'}
-      </div>
+      {#if items.length === 0 && !localStorage.getItem('import_done')}
+        <!-- First-run import prompt -->
+        <div class="flex flex-col items-center justify-center h-64 gap-4 text-center px-6">
+          <p class="text-gray-500 text-sm">Your inventory is empty.</p>
+          <p class="text-gray-400 text-xs">Import your existing Google Sheets data or add items manually.</p>
+          <a
+            href="{base}/import"
+            class="rounded-xl bg-brand-500 text-white px-6 py-3 text-sm font-semibold hover:bg-brand-600 transition"
+          >
+            Import from CSV
+          </a>
+        </div>
+      {:else}
+        <div class="flex items-center justify-center h-48 text-gray-400 text-sm">
+          {items.length === 0 ? 'No items yet — tap + to add one.' : 'No results.'}
+        </div>
+      {/if}
 
     {:else}
       <div class="grid grid-cols-2 gap-3">
