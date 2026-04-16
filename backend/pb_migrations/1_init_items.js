@@ -9,7 +9,8 @@ migrate((app) => {
         name: "box_nr",
         type: "number",
         required: true,
-        options: { min: 1, max: null, noDecimal: true },
+        min: 1,
+        noDecimal: true,
       },
       {
         name: "inhalt",
@@ -20,10 +21,8 @@ migrate((app) => {
         name: "typ",
         type: "select",
         required: true,
-        options: {
-          maxSelect: 1,
-          values: ["Box", "Regal", "Boden", "Schublade", "Sortierbox"],
-        },
+        maxSelect: 1,
+        values: ["Box", "Regal", "Boden", "Schublade", "Sortierbox"],
       },
       {
         name: "bereich",
@@ -34,12 +33,10 @@ migrate((app) => {
         name: "image",
         type: "file",
         required: false,
-        options: {
-          maxSelect: 1,
-          maxSize: 10485760,   // 10 MB
-          mimeTypes: ["image/jpeg", "image/png", "image/webp"],
-          thumbs: ["200x200", "800x600"],
-        },
+        maxSelect: 1,
+        maxSize: 10485760,
+        mimeTypes: ["image/jpeg", "image/png", "image/webp"],
+        thumbs: ["200x200", "800x600"],
       },
     ],
     indexes: [

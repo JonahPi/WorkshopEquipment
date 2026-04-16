@@ -6,7 +6,8 @@
   import PocketBase from 'pocketbase';
 
   let pbUrl       = '';
-  let pbToken     = '';
+  let pbEmail     = '';
+  let pbPassword  = '';
   let aioUsername = '';
   let aioKey      = '';
 
@@ -18,16 +19,19 @@
   async function verifyPocketBase() {
     pbError = '';
     pbOk = false;
-    if (!pbUrl || !pbToken) { pbError = 'URL and token are required.'; return; }
+    if (!pbUrl || !pbEmail || !pbPassword) { pbError = 'All three fields are required.'; return; }
     loading = true;
     try {
       const pb = new PocketBase(pbUrl.replace(/\/$/, ''));
-      pb.authStore.save(pbToken, null);
-      await pb.collection('items').getList(1, 1);
+      await pb.collection('_superusers').authWithPassword(pbEmail, pbPassword);
       pbOk = true;
+      // store the resulting JWT so we can restore it on next launch
+      localStorage.setItem('pb_token', pb.authStore.token);
     } catch (e: unknown) {
       const status = (e as { status?: number })?.status;
-      pbError = status === 401 ? 'Invalid token.' : 'Cannot reach PocketBase — check URL.';
+      pbError = status === 400 || status === 401
+        ? 'Wrong email or password.'
+        : 'Cannot reach PocketBase — check URL.';
     } finally {
       loading = false;
     }
@@ -38,6 +42,7 @@
     if (!aioUsername || !aioKey) { aioError = 'Both fields are required.'; return; }
     aioError = '';
 
+    const pbToken = localStorage.getItem('pb_token') ?? '';
     const creds = {
       pbUrl:       pbUrl.replace(/\/$/, ''),
       pbToken,
@@ -65,16 +70,23 @@
         <input
           bind:value={pbUrl}
           type="url"
-          placeholder="PocketBase URL  e.g. https://xyz.fly.dev"
+          placeholder="PocketBase URL  e.g. http://127.0.0.1:8090"
           class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           autocomplete="off" autocapitalize="none" spellcheck="false"
         />
         <input
-          bind:value={pbToken}
-          type="password"
-          placeholder="Access token"
+          bind:value={pbEmail}
+          type="email"
+          placeholder="Admin email"
           class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          autocomplete="off"
+          autocomplete="email"
+        />
+        <input
+          bind:value={pbPassword}
+          type="password"
+          placeholder="Admin password"
+          class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          autocomplete="current-password"
         />
         {#if pbError}
           <p class="text-red-500 text-xs">{pbError}</p>
