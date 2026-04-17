@@ -128,7 +128,7 @@
 
         if (row.foto) {
           try {
-            const resp = await fetch(row.foto);
+            const resp = await fetch(row.foto.replace(/^http:\/\//, 'https://'));
             if (resp.ok) {
               const blob = await resp.blob();
               const filename = row.foto.split('/').pop() ?? 'image.jpg';
