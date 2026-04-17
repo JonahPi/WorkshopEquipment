@@ -5,6 +5,8 @@
   import { page } from '$app/stores';
   import { getPb } from '$lib/pb';
   import { auth } from '$lib/stores/auth';
+  import { mqttStore } from '$lib/stores/mqtt';
+  const mqttStatus = mqttStore.status;
   import type { Item } from '$lib/types';
   import { TYP_COLOURS } from '$lib/types';
 
@@ -13,6 +15,48 @@
   let error = '';
   let deleting = false;
   let confirmDelete = false;
+
+  let actionMsg = '';
+  let actionError = '';
+
+  const BASE_URL = 'https://jonahpi.github.io/WorkshopEquipment';
+  const STEPPER_RE = /^\d+\/\d+$/;
+
+  function mqttTopic(feed: string): string {
+    return `${$auth?.aioUsername ?? ''}/feeds/${feed}`;
+  }
+
+  async function printLabel() {
+    if (!item) return;
+    actionMsg = ''; actionError = '';
+    const qr_content = `${BASE_URL}/item/${item.box_nr}`;
+    const payload = JSON.stringify({
+      label_type: 'material',
+      data: { box_nr: item.box_nr, qr_content, inhalt: item.inhalt, copies: 1 },
+    });
+    try {
+      await mqttStore.publish(mqttTopic('data'), payload);
+      actionMsg = 'Label sent!';
+    } catch {
+      actionError = 'MQTT not connected — check settings.';
+    }
+    setTimeout(() => { actionMsg = ''; actionError = ''; }, 3000);
+  }
+
+  async function sendToMachine() {
+    if (!item) return;
+    actionMsg = ''; actionError = '';
+    const isCoords = STEPPER_RE.test((item.bereich ?? '').trim());
+    const topic = mqttTopic(isCoords ? 'workshop.laser' : 'workshop.box');
+    const payload = isCoords ? item.bereich.trim() : String(item.box_nr);
+    try {
+      await mqttStore.publish(topic, payload);
+      actionMsg = 'Sent!';
+    } catch {
+      actionError = 'MQTT not connected — check settings.';
+    }
+    setTimeout(() => { actionMsg = ''; actionError = ''; }, 3000);
+  }
 
   $: boxNr = parseInt($page.params.box_nr, 10);
 
@@ -132,18 +176,31 @@
 
         <!-- Action buttons -->
         <div class="space-y-2">
+          {#if actionMsg}
+            <p class="text-center text-sm text-green-600 font-medium">{actionMsg}</p>
+          {:else if actionError}
+            <p class="text-center text-sm text-red-500">{actionError}</p>
+          {/if}
+
           <button
+            on:click={printLabel}
             class="w-full rounded-xl bg-brand-500 text-white py-3 text-sm font-semibold
                    hover:bg-brand-600 active:bg-brand-700 transition"
           >
             Print Label
           </button>
           <button
+            on:click={sendToMachine}
             class="w-full rounded-xl border border-brand-500 text-brand-500 py-3 text-sm font-semibold
                    hover:bg-brand-50 active:bg-brand-100 transition"
           >
             Send to Machine
           </button>
+
+          <!-- MQTT status indicator -->
+          <p class="text-center text-xs text-gray-300">
+            MQTT: {$mqttStatus}
+          </p>
         </div>
 
         <!-- Delete -->
@@ -168,11 +225,10 @@
               <button
                 on:click={deleteItem}
                 disabled={deleting}
-                class="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold
-                       hover:bg-red-600 disabled:opacity-40"
-                style="color: white;"
+                class="flex-1 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40"
+                style="background-color: #ef4444; color: white;"
               >
-                {#if deleting}Deleting…{:else}Delete{/if}
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
