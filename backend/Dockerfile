@@ -1,6 +1,6 @@
 FROM alpine:3.19
 
-ARG PB_VERSION=0.22.14
+ARG PB_VERSION=0.36.9
 
 RUN apk add --no-cache \
     unzip \
@@ -16,4 +16,4 @@ COPY backend/pb_migrations /pb/pb_migrations
 
 EXPOSE 8090
 
-CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data"]
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data", "--origins=*"]
