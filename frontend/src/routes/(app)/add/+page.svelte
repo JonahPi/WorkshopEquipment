@@ -7,6 +7,7 @@
   import { auth } from '$lib/stores/auth';
   import type { Item, ItemTyp } from '$lib/types';
   import { ALL_TYPEN, TYP_COLOURS } from '$lib/types';
+  import PhotoEditor from '$lib/components/PhotoEditor.svelte';
 
   // Edit mode when ?edit=<box_nr> is present
   $: editBoxNr = $page.url.searchParams.get('edit')
@@ -27,6 +28,8 @@
   let imageFile: File | null = null;
   let imagePreview = '';
   let existingImageUrl = '';
+  let editorSrc = '';
+  let showEditor = false;
 
   // Step 1 state
   let boxNrInput  = '';
@@ -100,10 +103,25 @@
   function handlePhoto(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      editorSrc = ev.target?.result as string;
+      showEditor = true;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleEditorConfirm(file: File) {
     imageFile = file;
     const reader = new FileReader();
     reader.onload = ev => { imagePreview = ev.target?.result as string; };
     reader.readAsDataURL(file);
+    showEditor = false;
+  }
+
+  function handleEditorCancel() {
+    showEditor = false;
+    editorSrc = '';
   }
 
   async function save() {
@@ -136,6 +154,14 @@
 <svelte:head>
   <title>Workshop — {isEdit ? 'Edit' : 'Add'} Item</title>
 </svelte:head>
+
+{#if showEditor}
+  <PhotoEditor
+    src={editorSrc}
+    on:confirm={e => handleEditorConfirm(e.detail)}
+    on:cancel={handleEditorCancel}
+  />
+{/if}
 
 <div class="flex flex-col min-h-screen bg-gray-50">
 
