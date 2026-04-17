@@ -12,7 +12,7 @@ RUN wget -q "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VE
     unzip /tmp/pb.zip -d /pb && \
     rm /tmp/pb.zip
 
-COPY pb_migrations /pb/pb_migrations
+COPY backend/pb_migrations /pb/pb_migrations
 
 EXPOSE 8090
 
