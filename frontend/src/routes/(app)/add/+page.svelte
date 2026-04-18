@@ -160,7 +160,7 @@
       });
       const data = await resp.json();
       if (data.description) inhalt = data.description;
-      else describeError = 'No description returned.';
+      else describeError = data.error ? `API error: ${data.error}` : 'No description returned.';
     } catch {
       describeError = 'AI description failed — check your API key.';
     } finally {

@@ -41,10 +41,19 @@ routerAdd("POST", "/api/describe", (e) => {
   });
 
   if (res.statusCode !== 200) {
-    return e.json(502, { error: "Claude API error", detail: res.raw });
+    return e.json(502, { error: "Claude API error", status: res.statusCode, detail: res.raw });
   }
 
-  const result      = res.json;
+  let result;
+  try {
+    result = res.json ?? JSON.parse(res.raw);
+  } catch (_) {
+    return e.json(502, { error: "Failed to parse Claude response", detail: res.raw });
+  }
+
   const description = result?.content?.[0]?.text ?? "";
+  if (!description) {
+    return e.json(502, { error: "Empty response from Claude", detail: JSON.stringify(result) });
+  }
   return e.json(200, { description });
 });
