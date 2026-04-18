@@ -5,16 +5,18 @@
   import { initPb } from '$lib/pb';
   import PocketBase from 'pocketbase';
 
-  let pbUrl       = '';
+  import { browser } from '$app/environment';
+
+  let pbUrl       = browser ? (localStorage.getItem('pb_url') ?? '') : '';
   let pbEmail     = '';
   let pbPassword  = '';
-  let aioUsername  = '';
-  let aioKey       = '';
-  let anthropicKey = '';
+  let aioUsername  = browser ? (localStorage.getItem('aio_username') ?? '') : '';
+  let aioKey       = browser ? (localStorage.getItem('aio_key') ?? '') : '';
+  let anthropicKey = browser ? (localStorage.getItem('anthropic_key') ?? '') : '';
 
   let pbError  = '';
   let aioError = '';
-  let pbOk     = false;
+  let pbOk     = browser ? !!localStorage.getItem('pb_token') : false;
   let loading  = false;
 
   async function verifyPocketBase() {
