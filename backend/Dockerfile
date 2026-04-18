@@ -13,6 +13,7 @@ RUN wget -q "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VE
     rm /tmp/pb.zip
 
 COPY backend/pb_migrations /pb/pb_migrations
+COPY backend/pb_hooks /pb/pb_hooks
 
 EXPOSE 8090
 

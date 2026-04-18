@@ -4,12 +4,13 @@ import type { Credentials } from '$lib/types';
 
 function loadCredentials(): Credentials | null {
   if (!browser) return null;
-  const pbUrl       = localStorage.getItem('pb_url');
-  const pbToken     = localStorage.getItem('pb_token');
-  const aioUsername = localStorage.getItem('aio_username');
-  const aioKey      = localStorage.getItem('aio_key');
+  const pbUrl        = localStorage.getItem('pb_url');
+  const pbToken      = localStorage.getItem('pb_token');
+  const aioUsername  = localStorage.getItem('aio_username');
+  const aioKey       = localStorage.getItem('aio_key');
+  const anthropicKey = localStorage.getItem('anthropic_key') ?? '';
   if (pbUrl && pbToken && aioUsername && aioKey) {
-    return { pbUrl, pbToken, aioUsername, aioKey };
+    return { pbUrl, pbToken, aioUsername, aioKey, anthropicKey };
   }
   return null;
 }
@@ -24,10 +25,11 @@ function createAuthStore() {
       localStorage.setItem('pb_token',      creds.pbToken);
       localStorage.setItem('aio_username',  creds.aioUsername);
       localStorage.setItem('aio_key',       creds.aioKey);
+      localStorage.setItem('anthropic_key', creds.anthropicKey);
       set(creds);
     },
     clear() {
-      ['pb_url', 'pb_token', 'aio_username', 'aio_key'].forEach(k =>
+      ['pb_url', 'pb_token', 'aio_username', 'aio_key', 'anthropic_key'].forEach(k =>
         localStorage.removeItem(k)
       );
       set(null);

@@ -17,6 +17,7 @@ export interface Credentials {
   pbToken: string;
   aioUsername: string;
   aioKey: string;
+  anthropicKey: string;
 }
 
 export const TYP_COLOURS: Record<ItemTyp, string> = {

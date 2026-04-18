@@ -8,8 +8,9 @@
   let pbUrl       = '';
   let pbEmail     = '';
   let pbPassword  = '';
-  let aioUsername = '';
-  let aioKey      = '';
+  let aioUsername  = '';
+  let aioKey       = '';
+  let anthropicKey = '';
 
   let pbError  = '';
   let aioError = '';
@@ -44,10 +45,11 @@
 
     const pbToken = localStorage.getItem('pb_token') ?? '';
     const creds = {
-      pbUrl:       pbUrl.replace(/\/$/, ''),
+      pbUrl:        pbUrl.replace(/\/$/, ''),
       pbToken,
       aioUsername,
       aioKey,
+      anthropicKey,
     };
     auth.save(creds);
     initPb(creds.pbUrl, creds.pbToken);
@@ -127,6 +129,19 @@
           <p class="text-red-500 text-xs">{aioError}</p>
         {/if}
       </div>
+    </section>
+
+    <!-- Anthropic (optional) -->
+    <section class="mb-8">
+      <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">AI Description (optional)</h2>
+      <p class="text-xs text-gray-400 mb-3">Claude API key for auto-describing box contents from photos.</p>
+      <input
+        bind:value={anthropicKey}
+        type="password"
+        placeholder="sk-ant-xxxxxxxxxxxx"
+        class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        autocomplete="off"
+      />
     </section>
 
     <button

@@ -124,6 +124,50 @@
     editorSrc = '';
   }
 
+  let describing = false;
+  let describeError = '';
+
+  async function describeWithAI() {
+    const src = imagePreview || existingImageUrl;
+    if (!src || !$auth?.anthropicKey) return;
+    describing = true;
+    describeError = '';
+    try {
+      let base64: string;
+      let mediaType: string;
+
+      if (imagePreview) {
+        // data URL → split out base64 and mime type
+        const [meta, data] = imagePreview.split(',');
+        base64    = data;
+        mediaType = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+      } else {
+        // fetch existing PocketBase image
+        const resp = await fetch(existingImageUrl);
+        const blob = await resp.blob();
+        mediaType  = blob.type || 'image/jpeg';
+        base64     = await new Promise<string>(resolve => {
+          const r = new FileReader();
+          r.onload = e => resolve((e.target!.result as string).split(',')[1]);
+          r.readAsDataURL(blob);
+        });
+      }
+
+      const resp = await fetch(`${$auth.pbUrl}/api/describe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, api_key: $auth.anthropicKey, media_type: mediaType }),
+      });
+      const data = await resp.json();
+      if (data.description) inhalt = data.description;
+      else describeError = 'No description returned.';
+    } catch {
+      describeError = 'AI description failed — check your API key.';
+    } finally {
+      describing = false;
+    }
+  }
+
   async function save() {
     saving = true;
     saveError = '';
@@ -355,9 +399,28 @@
           {/if}
 
           <div>
-            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              Inhalt
-            </label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Inhalt
+              </label>
+              {#if $auth?.anthropicKey && (imagePreview || existingImageUrl)}
+                <button
+                  on:click={describeWithAI}
+                  disabled={describing}
+                  class="text-xs text-brand-500 font-medium flex items-center gap-1
+                         disabled:opacity-40 hover:text-brand-600 transition"
+                >
+                  {#if describing}
+                    Describing…
+                  {:else}
+                    ✨ Describe with AI
+                  {/if}
+                </button>
+              {/if}
+            </div>
+            {#if describeError}
+              <p class="text-red-500 text-xs mb-1">{describeError}</p>
+            {/if}
             <textarea
               bind:value={inhalt}
               rows="4"
