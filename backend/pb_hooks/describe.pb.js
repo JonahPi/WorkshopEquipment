@@ -22,7 +22,7 @@ routerAdd("POST", "/api/describe", (e) => {
         },
         {
           type: "text",
-          text: "Describe the contents of this storage box in German. List the main items you can see. Be concise — 1 to 3 short sentences, no bullet points.",
+          text: "List the contents of this storage box in German. Reply with keywords only, separated by commas. No sentences, no bullet points, no punctuation other than commas.",
         },
       ],
     }],
