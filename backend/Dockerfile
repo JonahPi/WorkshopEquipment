@@ -17,4 +17,4 @@ COPY backend/pb_hooks /pb/pb_hooks
 
 EXPOSE 8090
 
-CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data", "--origins=*"]
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data", "--hooksDir=/pb/pb_hooks", "--origins=*"]
