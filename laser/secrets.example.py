@@ -1,0 +1,5 @@
+WIFI_SSID     = "YOUR_SSID"
+WIFI_PASSWORD = "YOUR_PASSWORD"
+
+AIO_USERNAME  = "YOUR_AIO_USERNAME"
+AIO_KEY       = "aio_xxxxxxxxxxxxxxxxxxxx"
