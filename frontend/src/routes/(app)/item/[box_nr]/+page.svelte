@@ -35,7 +35,7 @@
       data: { box_nr: item.box_nr, qr_content, inhalt: item.inhalt, copies: 1 },
     });
     try {
-      await mqttStore.publish(mqttTopic('easylabelprivate.data'), payload);
+      await mqttStore.publish('ToniTwn/feeds/easylabelprivate.data', payload);
       actionMsg = 'Label sent!';
     } catch {
       actionError = 'MQTT not connected — check settings.';
