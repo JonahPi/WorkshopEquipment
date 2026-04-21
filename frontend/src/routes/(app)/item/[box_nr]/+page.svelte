@@ -26,16 +26,16 @@
     return `${$auth?.aioUsername ?? ''}/feeds/${feed}`;
   }
 
-  async function printLabel() {
+  async function printLabel(labelType: 'material' | 'materialgross') {
     if (!item) return;
     actionMsg = ''; actionError = '';
     const qr_content = `${BASE_URL}/item/${item.box_nr}`;
     const payload = JSON.stringify({
-      label_type: 'material',
+      label_type: labelType,
       data: { box_nr: item.box_nr, qr_content, inhalt: item.inhalt, copies: 1 },
     });
     try {
-      await mqttStore.publish(mqttTopic('data'), payload);
+      await mqttStore.publish(mqttTopic('easylabelprivate.data'), payload);
       actionMsg = 'Label sent!';
     } catch {
       actionError = 'MQTT not connected — check settings.';
