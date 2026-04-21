@@ -182,13 +182,22 @@
             <p class="text-center text-sm text-red-500">{actionError}</p>
           {/if}
 
-          <button
-            on:click={printLabel}
-            class="w-full rounded-xl bg-brand-500 text-white py-3 text-sm font-semibold
-                   hover:bg-brand-600 active:bg-brand-700 transition"
-          >
-            Print Label
-          </button>
+          <div class="flex gap-2">
+            <button
+              on:click={() => printLabel('material')}
+              class="flex-1 rounded-xl bg-brand-500 text-white py-3 text-sm font-semibold
+                     hover:bg-brand-600 active:bg-brand-700 transition"
+            >
+              Print Label
+            </button>
+            <button
+              on:click={() => printLabel('materialgross')}
+              class="flex-1 rounded-xl bg-brand-500 text-white py-3 text-sm font-semibold
+                     hover:bg-brand-600 active:bg-brand-700 transition"
+            >
+              Print Label + QR
+            </button>
+          </div>
           <button
             on:click={sendToMachine}
             class="w-full rounded-xl border border-brand-500 text-brand-500 py-3 text-sm font-semibold
