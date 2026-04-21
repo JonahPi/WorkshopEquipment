@@ -3,16 +3,60 @@
   import type { Item } from '$lib/types';
   import { TYP_COLOURS } from '$lib/types';
   import { getPb } from '$lib/pb';
+  import { auth } from '$lib/stores/auth';
+  import { mqttStore } from '$lib/stores/mqtt';
 
   export let item: Item;
 
-  function thumbnailUrl(item: Item): string {
-    if (!item.image) return '';
-    try {
-      return getPb().getFileUrl(item, item.image, { thumb: '200x200' });
-    } catch {
-      return '';
+  const STEPPER_RE = /^\d+\/\d+$/;
+  const LONG_PRESS_MS = 500;
+
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let didLongPress = false;
+  let startX = 0;
+  let startY = 0;
+
+  function thumbnailUrl(it: Item): string {
+    if (!it.image) return '';
+    try { return getPb().getFileUrl(it, it.image, { thumb: '200x200' }); }
+    catch { return ''; }
+  }
+
+  async function showMe() {
+    const isCoords = STEPPER_RE.test((item.bereich ?? '').trim());
+    const topic = `${$auth?.aioUsername ?? ''}/feeds/${isCoords ? 'workshop.laser' : 'workshop.box'}`;
+    const payload = isCoords ? item.bereich.trim() : String(item.box_nr);
+    try { await mqttStore.publish(topic, payload); } catch {}
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    didLongPress = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    longPressTimer = setTimeout(() => {
+      didLongPress = true;
+      showMe();
+    }, LONG_PRESS_MS);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+      cancelLongPress();
     }
+  }
+
+  function onClick(e: MouseEvent) {
+    // Suppress navigation when a long press just fired
+    if (didLongPress) { e.preventDefault(); didLongPress = false; }
+  }
+
+  function onDblClick(e: MouseEvent) {
+    e.preventDefault();
+    showMe();
   }
 
   $: thumb = thumbnailUrl(item);
@@ -21,7 +65,13 @@
 
 <a
   href="{base}/item/{item.box_nr}"
-  class="block rounded-2xl overflow-hidden bg-white shadow-sm active:scale-95 transition-transform"
+  class="block rounded-2xl overflow-hidden bg-white shadow-sm active:scale-95 transition-transform select-none"
+  on:pointerdown={onPointerDown}
+  on:pointerup={cancelLongPress}
+  on:pointercancel={cancelLongPress}
+  on:pointermove={onPointerMove}
+  on:click={onClick}
+  on:dblclick={onDblClick}
 >
   <!-- Thumbnail -->
   <div class="relative aspect-square bg-gray-100">

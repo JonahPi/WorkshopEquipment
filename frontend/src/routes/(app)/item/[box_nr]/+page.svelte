@@ -194,7 +194,7 @@
             class="w-full rounded-xl border border-brand-500 text-brand-500 py-3 text-sm font-semibold
                    hover:bg-brand-50 active:bg-brand-100 transition"
           >
-            Send to Machine
+            Show me!
           </button>
 
           <!-- MQTT status indicator -->
