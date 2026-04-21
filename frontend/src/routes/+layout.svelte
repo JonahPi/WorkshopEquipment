@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
@@ -8,6 +9,12 @@
   import { initPb } from '$lib/pb';
   import { mqttStore } from '$lib/stores/mqtt';
 
+  // Initialize PocketBase synchronously so child pages can call getPb()
+  // in their own onMount without a race condition on direct URL loads.
+  if (browser && $auth) {
+    initPb($auth.pbUrl, $auth.pbToken);
+  }
+
   onMount(() => {
     const creds = $auth;
     const onSetup = $page.url.pathname.endsWith('/setup');
@@ -15,7 +22,6 @@
     if (!creds && !onSetup) {
       goto(`${base}/setup`);
     } else if (creds) {
-      initPb(creds.pbUrl, creds.pbToken);
       mqttStore.connect(creds.aioUsername, creds.aioKey);
     }
   });
