@@ -26,13 +26,31 @@
     return `${$auth?.aioUsername ?? ''}/feeds/${feed}`;
   }
 
+  function wordWrap(text: string, maxLen = 40): string {
+    const words = (text ?? '').split(' ');
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      if (current.length === 0) {
+        current = word;
+      } else if (current.length + 1 + word.length <= maxLen) {
+        current += ' ' + word;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.join('\n');
+  }
+
   async function printLabel(labelType: 'material' | 'materialgross') {
     if (!item) return;
     actionMsg = ''; actionError = '';
     const qr_content = `${BASE_URL}/item/${item.box_nr}`;
     const payload = JSON.stringify({
       label_type: labelType,
-      data: { box_nr: item.box_nr, qr_content, inhalt: item.inhalt, copies: 1 },
+      data: { box_nr: item.box_nr, qr_content, inhalt: wordWrap(item.inhalt), font_size: 1.25, copies: 1 },
     });
     try {
       await mqttStore.publish('ToniTwn/feeds/easylabelprivate.data', payload);
