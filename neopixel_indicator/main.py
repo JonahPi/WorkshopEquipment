@@ -16,6 +16,8 @@ BLINK_DURATION = 10           # seconds to blink after MQTT message
 BLINK_INTERVAL = 0.4          # seconds per on/off toggle
 STARTUP_DELAY  = 0.05         # seconds each box is lit during startup sweep
 PING_INTERVAL  = 15           # seconds between MQTT keepalive pings
+MAX_FAILURES   = 10           # consecutive reconnect failures before hard reset
+WIFI_TIMEOUT   = 30           # seconds to wait for WiFi before hard reset
 
 # Pixel indices are 0-based (original C++ config was 1-based; all values -1).
 BOX_CONFIG = [
@@ -161,6 +163,7 @@ BOX_CONFIG = [
 ]
 
 strip = neopixel.NeoPixel(PIXEL_PIN, NUM_PIXELS)
+wlan  = network.WLAN(network.STA_IF)
 
 
 def all_off():
@@ -190,7 +193,11 @@ def connect_wifi():
     if not wlan.isconnected():
         print("Connecting to WiFi...")
         wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+        deadline = time.time() + WIFI_TIMEOUT
         while not wlan.isconnected():
+            if time.time() > deadline:
+                print("WiFi timeout — rebooting")
+                machine.reset()
             time.sleep(0.5)
     print("WiFi connected:", wlan.ifconfig()[0])
 
@@ -244,7 +251,8 @@ client.set_callback(on_message)
 mqtt_connect()
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
-last_ping = time.time()
+last_ping     = time.time()
+fail_count    = 0
 
 while True:
     try:
@@ -267,8 +275,14 @@ while True:
                 set_box(blink_box, (0, 255, 0) if blink_on else (0, 0, 0))
                 blink_toggle = now + BLINK_INTERVAL
 
+        fail_count = 0  # successful iteration — reset failure counter
+
     except Exception as e:
-        print("MQTT error:", e, "— reconnecting in 5 s")
+        fail_count += 1
+        print("MQTT error ({}/{}):".format(fail_count, MAX_FAILURES), e)
+        if fail_count >= MAX_FAILURES:
+            print("Too many failures — rebooting")
+            machine.reset()
         time.sleep(5)
         try:
             mqtt_connect()
