@@ -25,7 +25,7 @@
       items = result;
     } catch (e: unknown) {
       const status = (e as { status?: number })?.status;
-      if (status === 401) {
+      if (status === 401 || status === 403) {
         auth.clear();
         goto(`${base}/setup`, { replaceState: true });
       } else {
