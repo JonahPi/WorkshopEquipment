@@ -19,6 +19,14 @@
   let pbOk     = browser ? !!localStorage.getItem('pb_token') : false;
   let loading  = false;
 
+  let showPbPassword   = false;
+  let showAioKey       = false;
+  let showAnthropicKey = false;
+
+  function onPaste(e: Event, set: (v: string) => void) {
+    requestAnimationFrame(() => set((e.target as HTMLInputElement).value));
+  }
+
   async function verifyPocketBase() {
     pbError = '';
     pbOk = false;
@@ -28,7 +36,6 @@
       const pb = new PocketBase(pbUrl.replace(/\/$/, ''));
       await pb.collection('_superusers').authWithPassword(pbEmail, pbPassword);
       pbOk = true;
-      // store the resulting JWT so we can restore it on next launch
       localStorage.setItem('pb_token', pb.authStore.token);
     } catch (e: unknown) {
       const status = (e as { status?: number })?.status;
@@ -86,14 +93,26 @@
           placeholder="Admin email"
           class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+          on:paste={(e) => onPaste(e, v => pbEmail = v)}
         />
-        <input
-          bind:value={pbPassword}
-          type="password"
-          placeholder="Admin password"
-          class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          autocomplete="current-password"
-        />
+        <div class="relative">
+          {#if showPbPassword}
+            <input bind:value={pbPassword} type="text"
+              placeholder="Admin password"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false"
+              on:paste={(e) => onPaste(e, v => pbPassword = v)} />
+          {:else}
+            <input bind:value={pbPassword} type="password"
+              placeholder="Admin password"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              autocomplete="current-password" autocapitalize="none" autocorrect="off"
+              on:paste={(e) => onPaste(e, v => pbPassword = v)} />
+          {/if}
+          <button type="button" on:click={() => showPbPassword = !showPbPassword}
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 px-1 py-1"
+          >{showPbPassword ? 'Hide' : 'Show'}</button>
+        </div>
         {#if pbError}
           <p class="text-red-500 text-xs">{pbError}</p>
         {/if}
@@ -122,13 +141,24 @@
           class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           autocomplete="off" autocapitalize="none" spellcheck="false"
         />
-        <input
-          bind:value={aioKey}
-          type="password"
-          placeholder="AIO Key  aio_xxxxxxxxxxxx"
-          class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          autocomplete="off"
-        />
+        <div class="relative">
+          {#if showAioKey}
+            <input bind:value={aioKey} type="text"
+              placeholder="AIO Key  aio_xxxxxxxxxxxx"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+              on:paste={(e) => onPaste(e, v => aioKey = v)} />
+          {:else}
+            <input bind:value={aioKey} type="password"
+              placeholder="AIO Key  aio_xxxxxxxxxxxx"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              autocomplete="off" autocapitalize="none" autocorrect="off"
+              on:paste={(e) => onPaste(e, v => aioKey = v)} />
+          {/if}
+          <button type="button" on:click={() => showAioKey = !showAioKey}
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 px-1 py-1"
+          >{showAioKey ? 'Hide' : 'Show'}</button>
+        </div>
         {#if aioError}
           <p class="text-red-500 text-xs">{aioError}</p>
         {/if}
@@ -139,13 +169,24 @@
     <section class="mb-8">
       <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">AI Description (optional)</h2>
       <p class="text-xs text-gray-400 mb-3">Claude API key for auto-describing box contents from photos.</p>
-      <input
-        bind:value={anthropicKey}
-        type="password"
-        placeholder="sk-ant-xxxxxxxxxxxx"
-        class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-        autocomplete="off"
-      />
+      <div class="relative">
+        {#if showAnthropicKey}
+          <input bind:value={anthropicKey} type="text"
+            placeholder="sk-ant-xxxxxxxxxxxx"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+            on:paste={(e) => onPaste(e, v => anthropicKey = v)} />
+        {:else}
+          <input bind:value={anthropicKey} type="password"
+            placeholder="sk-ant-xxxxxxxxxxxx"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            autocomplete="off" autocapitalize="none" autocorrect="off"
+            on:paste={(e) => onPaste(e, v => anthropicKey = v)} />
+        {/if}
+        <button type="button" on:click={() => showAnthropicKey = !showAnthropicKey}
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 px-1 py-1"
+        >{showAnthropicKey ? 'Hide' : 'Show'}</button>
+      </div>
     </section>
 
     <button
