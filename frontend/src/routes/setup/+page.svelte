@@ -85,7 +85,7 @@
           type="email"
           placeholder="Admin email"
           class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          autocomplete="email"
+          autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false"
         />
         <input
           bind:value={pbPassword}
