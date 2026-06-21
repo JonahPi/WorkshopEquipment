@@ -49,6 +49,8 @@
     const creds = {
       pbUrl:        pbUrl.replace(/\/$/, ''),
       pbToken,
+      pbEmail,
+      pbPassword,
       aioUsername,
       aioKey,
       anthropicKey,

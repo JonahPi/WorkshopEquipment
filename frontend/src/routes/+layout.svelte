@@ -8,20 +8,47 @@
   import { auth } from '$lib/stores/auth';
   import { initPb } from '$lib/pb';
   import { mqttStore } from '$lib/stores/mqtt';
+  import PocketBase from 'pocketbase';
 
-  // Initialize PocketBase synchronously so child pages can call getPb()
-  // in their own onMount without a race condition on direct URL loads.
   if (browser && $auth) {
     initPb($auth.pbUrl, $auth.pbToken);
   }
 
-  onMount(() => {
+  onMount(async () => {
     const creds = $auth;
     const onSetup = $page.url.pathname.endsWith('/setup');
 
     if (!creds && !onSetup) {
       goto(`${base}/setup`);
-    } else if (creds) {
+      return;
+    }
+
+    if (creds) {
+      // Try to refresh the existing token; fall back to re-auth with stored password.
+      try {
+        const pb = new PocketBase(creds.pbUrl);
+        pb.authStore.save(creds.pbToken, null);
+        try {
+          const result = await pb.collection('_superusers').authRefresh();
+          auth.updateToken(result.token);
+          initPb(creds.pbUrl, result.token);
+        } catch {
+          if (creds.pbEmail && creds.pbPassword) {
+            const result = await pb.collection('_superusers').authWithPassword(creds.pbEmail, creds.pbPassword);
+            auth.updateToken(result.token);
+            initPb(creds.pbUrl, result.token);
+          } else {
+            auth.clear();
+            goto(`${base}/setup`);
+            return;
+          }
+        }
+      } catch {
+        auth.clear();
+        goto(`${base}/setup`);
+        return;
+      }
+
       mqttStore.connect(creds.aioUsername, creds.aioKey);
     }
   });

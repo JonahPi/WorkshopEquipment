@@ -15,6 +15,8 @@ export interface Item {
 export interface Credentials {
   pbUrl: string;
   pbToken: string;
+  pbEmail: string;
+  pbPassword: string;
   aioUsername: string;
   aioKey: string;
   anthropicKey: string;
